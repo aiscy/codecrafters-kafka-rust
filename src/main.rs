@@ -26,9 +26,12 @@ fn main() {
                     KafkaResponseHeaderV0::new(7),
                     Default::default()
                 );
-                let mut writer = NoSeek::new(Vec::with_capacity(16));
+                let mut writer = NoSeek::new(Vec::with_capacity(8));
                 response.write(&mut writer).unwrap();
-                stream.write(&writer.into_inner()).unwrap();
+                match stream.write(&writer.into_inner()) {
+                    Ok(size) => { println!("wrote {size} bytes"); }
+                    Err(e) => { println!("error: {e}"); }
+                }
             }
             Err(e) => {
                 println!("error: {}", e);
