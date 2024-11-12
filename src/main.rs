@@ -2,12 +2,12 @@
 
 mod kafka;
 
-use std::io::{Cursor, Write};
+use std::io::{Cursor, Read, Write};
 use std::net::TcpListener;
-use binrw::BinWrite;
+use binrw::{BinRead, BinWrite};
 use binrw::io::NoSeek;
 use bytes::BufMut;
-use crate::kafka::proto::KafkaResponseHeaderV0;
+use crate::kafka::proto::{KafkaRequest, KafkaResponse, KafkaResponseHeaderV0};
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -21,12 +21,19 @@ fn main() {
         match stream {
             Ok(mut stream) => {
                 println!("accepted new connection");
-                let response = kafka::proto::KafkaResponse::new(
+                
+                let mut buf = [0; 1024];
+                stream.read(&mut buf).unwrap();
+                
+                let request = KafkaRequest::read(&mut Cursor::new(buf)).unwrap();
+                
+                let response = KafkaResponse::new(
                     0, 
-                    KafkaResponseHeaderV0::new(7),
+                    KafkaResponseHeaderV0::new(request.header.correlation_id),
                     Default::default()
                 );
-                let mut writer = NoSeek::new(Vec::with_capacity(8));
+                
+                let mut writer = Cursor::new(Vec::with_capacity(1024));
                 response.write(&mut writer).unwrap();
                 match stream.write(&writer.into_inner()) {
                     Ok(size) => { println!("wrote {size} bytes"); }
