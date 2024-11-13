@@ -7,7 +7,7 @@ use std::net::TcpListener;
 use binrw::{BinRead, BinWrite};
 use binrw::io::NoSeek;
 use bytes::BufMut;
-use crate::kafka::proto::{KafkaRequest, KafkaResponse, KafkaResponseHeaderV0};
+use crate::kafka::proto::{ApiKey, ErrorCode, KafkaBodyDummy, KafkaRequest, KafkaResponse, KafkaResponseApiVersionsV4, KafkaResponseHeaderV0};
 
 fn main() {
     // You can use print statements as follows for debugging, they'll be visible when running tests.
@@ -26,14 +26,17 @@ fn main() {
                 stream.read(&mut buf).unwrap();
                 
                 let request = KafkaRequest::read(&mut Cursor::new(buf)).unwrap();
+                let response = match request.header.request_api_key {
+                    ApiKey::ApiVersions => {
+                        match request.header.request_api_version {
+                            0..=4 => KafkaResponse::new(KafkaResponseApiVersionsV4::new(request.header.correlation_id, ErrorCode::None), KafkaBodyDummy),
+                            _ => KafkaResponse::new(KafkaResponseApiVersionsV4::new(request.header.correlation_id, ErrorCode::UnsupportedVersion), KafkaBodyDummy)
+                        }
+                    },
+                    _ => unimplemented!()
+                };
                 
-                let response = KafkaResponse::new(
-                    0, 
-                    KafkaResponseHeaderV0::new(request.header.correlation_id),
-                    Default::default()
-                );
-                
-                let mut writer = Cursor::new(Vec::with_capacity(1024));
+                let mut writer = Cursor::new(Vec::with_capacity(64));
                 response.write(&mut writer).unwrap();
                 match stream.write(&writer.into_inner()) {
                     Ok(size) => { println!("wrote {size} bytes"); }
