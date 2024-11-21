@@ -1,6 +1,5 @@
 use bytes::BytesMut;
 use tokio_util::codec::Encoder;
-use crate::kafka::proto::KafkaResponse;
 
 struct KafkaCodec;
 

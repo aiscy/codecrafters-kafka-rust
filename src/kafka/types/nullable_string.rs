@@ -55,7 +55,7 @@ impl BinWrite for NullableString {
                 if bytes.len() > i16::MAX as usize {
                     return Err(binrw::Error::Custom {
                         pos: 0,
-                        err: Box::new("String too long for nullable string"),
+                        err: Box::new("String is too long for a nullable string"),
                     });
                 }
 
@@ -73,6 +73,12 @@ impl Deref for NullableString {
 
     fn deref(&self) -> &Self::Target {
         &self.0
+    }
+}
+
+impl From<Option<String>> for NullableString {
+    fn from(value: Option<String>) -> Self {
+        Self(value)
     }
 }
 

@@ -11,4 +11,4 @@ bytes = "~1.8"                                  # helps manage buffers
 thiserror = "2"                             # error handling
 tokio = { version = "1", features = ["full"] }
 tokio-util = { version = "~0.7", features = ["codec"] }
-binrw = "~0.14"
+binrw = { version = "~0.14" }

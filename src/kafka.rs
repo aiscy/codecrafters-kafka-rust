@@ -1,4 +1,5 @@
 pub(crate) mod codec;
 pub(crate) mod proto;
-mod types;
-mod misc;
+pub(crate) mod types;
+pub(crate) mod request;
+pub(crate) mod response;
