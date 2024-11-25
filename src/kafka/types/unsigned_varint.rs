@@ -1,6 +1,9 @@
+use std::cmp::Ordering;
 use binrw::meta::{EndianKind, ReadEndian, WriteEndian};
 use binrw::{BinRead, BinResult, BinWrite, Endian};
+use std::fmt::Debug;
 use std::io::{Read, Seek, Write};
+use std::num::TryFromIntError;
 use std::ops::Deref;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -21,8 +24,8 @@ impl BinRead for UnsignedVarInt {
 
         loop {
             let byte = u8::read(reader)?;
-            value |= ((byte & 0b0_1111111) as u32) << shift; 
-            
+            value |= ((byte & 0b0_1111111) as u32) << shift;
+
             if byte & 0b1_0000000 == 0 {
                 break;
             }
@@ -84,6 +87,15 @@ impl Deref for UnsignedVarInt {
 impl From<u32> for UnsignedVarInt {
     fn from(value: u32) -> Self {
         Self(value)
+    }
+}
+
+impl TryFrom<usize> for UnsignedVarInt {
+    type Error = TryFromIntError;
+
+    fn try_from(value: usize) -> Result<Self, Self::Error> {
+        let value = u32::try_from(value)?;
+        Ok(Self(value))
     }
 }
 

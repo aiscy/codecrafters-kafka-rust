@@ -13,3 +13,5 @@ pub(crate) use unsigned_varint::*;
 
 mod compact_array;
 pub(crate) use compact_array::*;
+
+pub(crate) mod helper;

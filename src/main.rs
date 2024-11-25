@@ -1,74 +1,93 @@
 mod kafka;
 
-use crate::kafka::proto::{KafkaRequest, KafkaRequestHeader, KafkaResponseHeaderV0};
-use binrw::{BinRead, BinWrite};
-use std::io::{Cursor, Read, Write};
-use std::net::TcpListener;
-use crate::kafka::response::{ApiKeyV3, KafkaGenericResponse, KafkaResponseApiVersionsV3};
+use crate::kafka::codec::KafkaCodec;
+use crate::kafka::request::generic_request::{KafkaRequest, KafkaRequestHeader, KafkaResponseHeaderV0};
+use crate::kafka::response::{ApiKeyV4, KafkaGenericResponse, KafkaResponseApiVersionsV4};
 use crate::kafka::types::{ApiKey, ErrorCode};
+use futures::SinkExt;
+use std::net::SocketAddr;
+use tokio::net::TcpListener;
+use tokio_stream::StreamExt;
+use tokio_util::codec::Framed;
+use tracing::level_filters::LevelFilter;
+use tracing::{error, info, instrument, warn};
+use tracing_subscriber::EnvFilter;
 
-fn main() {
-    // You can use print statements as follows for debugging, they'll be visible when running tests.
-    println!("Logs from your program will appear here!");
+#[tokio::main(flavor = "current_thread")]
+async fn main() -> anyhow::Result<()> {
+    tracing_subscriber::fmt()
+        .with_env_filter(
+            EnvFilter::builder()
+                .with_default_directive(LevelFilter::INFO.into())
+                .from_env_lossy()
+        )
+        .init();
 
-    // Uncomment this block to pass the first stage
-    //
-    let listener = TcpListener::bind("127.0.0.1:9092").unwrap();
+    let listener = TcpListener::bind("127.0.0.1:9092").await?;
+    info!("Listening on: {}", listener.local_addr()?);
 
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                println!("accepted new connection");
-                
-                let mut buf = [0; 1024];
-                stream.read(&mut buf).unwrap();
-                let request = KafkaRequest::read_be(&mut Cursor::new(buf)).unwrap();
-                let correlation_id = get_correlation_id(&request);
-                let request_api_version = get_requests_api_version(&request);
-                let request_api_key = get_requests_api_key(&request);
+    loop {
+        let (socket, addr) = listener.accept().await?;
+        info!(client = %addr, "Accepted new connection");
+        tokio::spawn(handle_client(socket, addr));
+    }
+
+    Ok(())
+}
+
+#[instrument(skip(socket))]
+async fn handle_client(socket: tokio::net::TcpStream, addr: SocketAddr) {
+    let mut framed = Framed::new(socket, KafkaCodec);
+    info!(client = %addr, "Client handler spawned");
+
+    while let Some(request) = framed.next().await {
+        match request {
+            Ok(req) => {
+                info!(client = %addr, request = ?req, "Received request");
+
+                let correlation_id = get_correlation_id(&req);
+                let request_api_version = get_requests_api_version(&req);
+                let request_api_key = get_requests_api_key(&req);
                 let response = match request_api_key {
                     ApiKey::ApiVersions => {
                         match request_api_version {
                             0..=4 => {
                                 KafkaGenericResponse::new(
                                     KafkaResponseHeaderV0::new(correlation_id),
-                                    KafkaResponseApiVersionsV3::new(
+                                    KafkaResponseApiVersionsV4::new(
                                         ErrorCode::None,
                                         vec![
-                                            ApiKeyV3::new(ApiKey::ApiVersions, 0, 4)
+                                            ApiKeyV4::new(ApiKey::ApiVersions, 0, 4)
                                         ],
-                                        250
+                                        250,
                                     ))
-                            },
+                            }
                             _ => KafkaGenericResponse::new(
                                 KafkaResponseHeaderV0::new(correlation_id),
-                                KafkaResponseApiVersionsV3::new(
+                                KafkaResponseApiVersionsV4::new(
                                     ErrorCode::UnsupportedVersion,
                                     vec![
-                                        ApiKeyV3::new(ApiKey::ApiVersions, 0, 4)
+                                        ApiKeyV4::new(ApiKey::ApiVersions, 0, 4)
                                     ],
                                     420,
-                                )
+                                ),
                             )
                         }
-                    },
+                    }
                     _ => unimplemented!()
                 };
-
-                let mut writer = Cursor::new(Vec::with_capacity(64));
-                response.write_be(&mut writer).unwrap();
-                let response_bytes = &writer.into_inner();
-                println!("responding with: {response:?}, bytes: {response_bytes:?}");
-                match stream.write(response_bytes) {
-                    Ok(size) => { println!("wrote {size} bytes"); }
-                    Err(e) => { println!("error: {e}"); }
+                if let Err(err) = framed.send(response).await {
+                    warn!(client = %addr, error = %err, "Failed to send response");
                 }
             }
-            Err(e) => {
-                println!("error: {}", e);
+            Err(err) => {
+                error!(client = %addr, error = %err, "Error decoding request");
+                break;
             }
         }
     }
+
+    info!(client = %addr, "Connection closed");
 }
 
 fn get_requests_api_version(request: &KafkaRequest) -> i16 {
