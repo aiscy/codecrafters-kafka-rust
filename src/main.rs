@@ -1,16 +1,18 @@
 mod kafka;
 
 use crate::kafka::codec::KafkaCodec;
-use crate::kafka::request::generic_request::{KafkaRequest, KafkaRequestHeader, KafkaResponseHeaderV0};
-use crate::kafka::response::{ApiKeyV4, KafkaGenericResponse, KafkaResponseApiVersionsV4};
-use crate::kafka::types::{ApiKey, ErrorCode};
+use crate::kafka::proto::ApiVersionsResponse;
+use crate::kafka::request::generic_request::{KafkaRequest, KafkaRequestHeader};
+use crate::kafka::response::KafkaResponseHeaderV0;
+use crate::kafka::response::{KafkaGenericResponse};
+use crate::kafka::types::ApiKey;
 use futures::SinkExt;
 use std::net::SocketAddr;
-use tokio::net::TcpListener;
+use tokio::net::{TcpListener, TcpStream};
 use tokio_stream::StreamExt;
 use tokio_util::codec::Framed;
 use tracing::level_filters::LevelFilter;
-use tracing::{error, info, instrument, warn};
+use tracing::{error, info, instrument};
 use tracing_subscriber::EnvFilter;
 
 #[tokio::main(flavor = "current_thread")]
@@ -36,7 +38,7 @@ async fn main() -> anyhow::Result<()> {
 }
 
 #[instrument(skip(socket))]
-async fn handle_client(socket: tokio::net::TcpStream, addr: SocketAddr) {
+async fn handle_client(socket: TcpStream, addr: SocketAddr) {
     let mut framed = Framed::new(socket, KafkaCodec);
     info!(client = %addr, "Client handler spawned");
 
@@ -46,38 +48,22 @@ async fn handle_client(socket: tokio::net::TcpStream, addr: SocketAddr) {
                 info!(client = %addr, request = ?req, "Received request");
 
                 let correlation_id = get_correlation_id(&req);
-                let request_api_version = get_requests_api_version(&req);
-                let request_api_key = get_requests_api_key(&req);
-                let response = match request_api_key {
+                let api_version = get_requests_api_version(&req);
+                let api_key = get_requests_api_key(&req);
+                let response = match api_key {
                     ApiKey::ApiVersions => {
-                        match request_api_version {
-                            0..=4 => {
-                                KafkaGenericResponse::new(
-                                    KafkaResponseHeaderV0::new(correlation_id),
-                                    KafkaResponseApiVersionsV4::new(
-                                        ErrorCode::None,
-                                        vec![
-                                            ApiKeyV4::new(ApiKey::ApiVersions, 0, 4)
-                                        ],
-                                        250,
-                                    ))
-                            }
-                            _ => KafkaGenericResponse::new(
-                                KafkaResponseHeaderV0::new(correlation_id),
-                                KafkaResponseApiVersionsV4::new(
-                                    ErrorCode::UnsupportedVersion,
-                                    vec![
-                                        ApiKeyV4::new(ApiKey::ApiVersions, 0, 4)
-                                    ],
-                                    420,
-                                ),
-                            )
-                        }
+                        KafkaGenericResponse::new(
+                            KafkaResponseHeaderV0::new(correlation_id),
+                            ApiVersionsResponse::new(api_version)
+                        )
+                    },
+                    _ => {
+                        error!(client = %addr, api_key = ?api_key, "Unhandled API key");
+                        continue;
                     }
-                    _ => unimplemented!()
                 };
                 if let Err(err) = framed.send(response).await {
-                    warn!(client = %addr, error = %err, "Failed to send response");
+                    error!(client = %addr, error = %err, "Failed to send response");
                 }
             }
             Err(err) => {

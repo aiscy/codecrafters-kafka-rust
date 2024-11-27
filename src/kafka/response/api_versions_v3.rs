@@ -1,39 +1,35 @@
-use binrw::{binrw, binwrite};
-use crate::kafka::response::ApiKeyV4;
-use crate::kafka::types::{ApiKey, CompactArray, ErrorCode, TagBuffer};
+use crate::kafka::proto::API_REGISTRY;
+use crate::kafka::response::common::ApiVersion;
+use crate::kafka::types::{CompactArray, ErrorCode, TagBuffer};
+use binrw::binwrite;
 
 #[binwrite]
 #[bw(big)]
 #[derive(Debug)]
 pub(crate) struct KafkaResponseApiVersionsV3 {
     pub(crate) error_code: ErrorCode,
-    pub(crate) api_keys: CompactArray<ApiKeyV3>,
+    pub(crate) api_versions: CompactArray<ApiVersion>,
     pub(crate) throttle_time_ms: i32,
-    _tagged_fields1: TagBuffer,
-}
-
-#[binrw]
-#[brw(big)]
-#[derive(Debug, Clone)]
-pub(crate) struct ApiKeyV3 {
-    pub(crate) api_key: ApiKey,
-    pub(crate) min_version: i16,
-    pub(crate) max_version: i16,
     _tagged_fields: TagBuffer,
-}
-
-impl ApiKeyV3 {
-    pub fn new(api_key: ApiKey, min_version: i16, max_version: i16) -> Self {
-        Self { api_key, min_version, max_version, _tagged_fields: Default::default() }
-    }
 }
 
 impl KafkaResponseApiVersionsV3 {
     pub(crate) fn new(
         error_code: ErrorCode,
-        api_keys: Vec<ApiKeyV3>,
         throttle_time_ms: i32,
     ) -> Self {
-        Self { error_code, api_keys: api_keys.into(), throttle_time_ms, _tagged_fields1: Default::default() }
+        let api_versions = API_REGISTRY
+            .iter()
+            .map(|(api_key, range)|
+                ApiVersion::new(
+                    *api_key,
+                    *range.start(),
+                    *range.end(),
+                )
+            )
+            .collect::<Vec<_>>()
+            .into();
+
+        Self { error_code, api_versions, throttle_time_ms, _tagged_fields: Default::default() }
     }
 }

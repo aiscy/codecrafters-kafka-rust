@@ -2,7 +2,6 @@ use binrw::{binread, binwrite, BinRead, BinResult, Endian};
 use std::io::{Read, Seek};
 use binrw::meta::{EndianKind, ReadEndian};
 use binrw::io::TakeSeekExt;
-use crate::kafka::proto::KafkaBodyEmpty;
 use crate::kafka::request::api_versions_v4::KafkaRequestApiVersionsV4;
 use crate::kafka::types::{ApiKey, NullableString, TagBuffer};
 
@@ -81,17 +80,4 @@ pub(crate) struct  KafkaRequestHeaderV2 {
     pub(crate) correlation_id: i32,
     pub(crate) client_id: NullableString,
     _tagged_fields: TagBuffer,
-}
-
-#[binwrite]
-#[bw(big)]
-#[derive(Debug)]
-pub(crate) struct KafkaResponseHeaderV0 {
-    pub(crate) correlation_id: i32,
-}
-
-impl KafkaResponseHeaderV0 {
-    pub(crate) fn new(correlation_id: i32) -> Self {
-        Self { correlation_id }
-    }
 }

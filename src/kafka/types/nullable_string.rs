@@ -19,9 +19,9 @@ impl BinRead for NullableString {
         if length == -1 {
             Ok(Self(None))
         } else if length < -1 {
-            Err(binrw::Error::Custom {
+            Err(binrw::Error::AssertFail {
                 pos: 0,
-                err: Box::new(format!("Invalid length for a nullable string: {length}")),
+                message: format!("Invalid length for a nullable string: {length}"),
             })
         } else {
             let mut bytes = vec![0u8; length as usize];
@@ -55,7 +55,7 @@ impl BinWrite for NullableString {
                 if bytes.len() > i16::MAX as usize {
                     return Err(binrw::Error::Custom {
                         pos: 0,
-                        err: Box::new("String is too long for a nullable string"),
+                        err: Box::new(format!("String is too long for a nullable string: {}", bytes.len())),
                     });
                 }
 

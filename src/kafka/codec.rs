@@ -3,7 +3,6 @@ use std::io::Cursor;
 use binrw::{BinRead, BinWrite};
 use binrw::meta::WriteEndian;
 use bytes::{Buf, BytesMut};
-use tokio::io::AsyncWriteExt;
 use tokio_util::codec::{Decoder, Encoder};
 use log::warn;
 use crate::kafka::request::generic_request::KafkaRequest;

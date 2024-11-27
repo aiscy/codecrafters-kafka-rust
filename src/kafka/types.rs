@@ -15,3 +15,4 @@ mod compact_array;
 pub(crate) use compact_array::*;
 
 pub(crate) mod helper;
+mod compact_nullable_string;
